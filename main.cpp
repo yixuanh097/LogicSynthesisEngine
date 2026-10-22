@@ -103,16 +103,20 @@ int main(int argc, char *argv[])
         const string &bitstream = bitstreams[output];
         const string &outputName = outputNames[output];
         cout << "canonical SOP: "
-             << generateCanonicalSOP(bitstream, inputNames, outputName) << "\n";
+             << generateCanonicalSOP(bitstream, inputNames, outputName) << endl;
         cout << "canonical POS: "
-             << generateCanonicalPOS(bitstream, inputNames, outputName) << "\n";
+             << generateCanonicalPOS(bitstream, inputNames, outputName) << endl;
 
         // Find the inverse function by inverting the bitstream.
         const string bitstreamFlip = flipBinaryString(bitstream);
         cout << "canonical SOP: "
-             << generateCanonicalSOP(bitstreamFlip, inputNames, outputName + "-bar") << "\n";
+             << generateCanonicalSOP(bitstreamFlip, inputNames, outputName + "-bar") << endl;
         cout << "canonical POS: "
-             << generateCanonicalPOS(bitstreamFlip, inputNames, outputName + "-bar") << "\n";
+             << generateCanonicalPOS(bitstreamFlip, inputNames, outputName + "-bar") << endl;
+
+        // minimized SOP/POS
+        cout << "minimized SOP: " << generateMinimizedSOP(bitstream, inputNames, outputName) << endl;
+        cout << "minimized POS: " << generateMinimizedPOS(bitstream, inputNames, outputName) << endl;
     }
 
     return 0;
