@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "analyzer.h"
+#include "verilog_generation.h"
 
 #include <bitset>
 
@@ -115,8 +116,33 @@ int main(int argc, char *argv[])
              << generateCanonicalPOS(bitstreamFlip, inputNames, outputName + "-bar") << endl;
 
         // minimized SOP/POS
-        cout << "minimized SOP: " << generateMinimizedSOP(bitstream, inputNames, outputName) << endl;
-        cout << "minimized POS: " << generateMinimizedPOS(bitstream, inputNames, outputName) << endl;
+        int sopLiteralsSaved = 0;
+        int posLiteralsSaved = 0;
+        string minimizedSOP = generateMinimizedSOP(bitstream, inputNames, outputName, posLiteralsSaved);
+        cout << "minimized SOP: "
+             << minimizedSOP
+             << " (literals saved: " << sopLiteralsSaved << ")" << endl;
+        cout << "minimized POS: "
+             << generateMinimizedPOS(bitstream, inputNames, outputName, posLiteralsSaved)
+             << " (literals saved: " << posLiteralsSaved << ")" << endl;
+
+        cout << "# prime implicants: " << countPrimeImplicants(bitstream) << endl;
+        cout << "# essential prime implicants: " << countEssentialPrimeImplicants(bitstream) << endl;
+        cout << "# on-set minterms: " << countOnSetMinterms(bitstream) << endl;
+        cout << "# off-set minterms: " << countOffSetMaxterms(bitstream) << endl;
+
+        bool hazardExists = false;
+        string hazardFree = generateHazardFreeSOP(bitstream, inputNames, outputName, hazardExists);
+        if (hazardExists)
+        {
+            cout << "there is hazard in original circuit, hazard-free version: " << hazardFree << endl;
+        }
+        else
+        {
+            cout << "no hazard exists" << endl;
+        }
+
+        cout << generateVerilogModule(minimizedSOP) << endl;
     }
 
     return 0;

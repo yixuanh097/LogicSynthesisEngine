@@ -1,6 +1,7 @@
 #include "analyzer.h"
 
 #include <algorithm>
+#include <climits>
 #include <functional>
 #include <limits>
 #include <map>
@@ -12,32 +13,12 @@ bool inputBitForRow(size_t row, size_t inputIndex, size_t inputCount)
     return ((row >> (inputCount - 1 - inputIndex)) & 1U) != 0;
 }
 
-namespace
-{
 struct Implicant
 {
     string pattern;
     vector<size_t> minterms;
     bool combined = false;
 };
-
-void validateMinimizerInputs(const string &bitstream,
-                             const vector<string> &inputNames,
-                             const string &outputName)
-{
-    if (inputNames.size() >= numeric_limits<size_t>::digits)
-        throw invalid_argument("too many input names for a truth-table bitstream");
-    if (bitstream.size() != (size_t{1} << inputNames.size()))
-        throw invalid_argument("bitstream length must equal 2^number-of-inputs");
-    if (outputName.empty())
-        throw invalid_argument("output name must not be empty");
-    if (any_of(bitstream.begin(), bitstream.end(),
-               [](char bit) { return bit != '0' && bit != '1'; }))
-        throw invalid_argument("bitstream may contain only '0' and '1'");
-    if (any_of(inputNames.begin(), inputNames.end(),
-               [](const string &name) { return name.empty(); }))
-        throw invalid_argument("input names must not be empty");
-}
 
 vector<Implicant> findPrimeImplicants(const string &bitstream, char target)
 {
@@ -138,7 +119,7 @@ vector<Implicant> findMinimumCover(const string &bitstream, char target)
     {
         literalCounts[prime] = count(primes[prime].pattern.begin(),
                                      primes[prime].pattern.end(), '0') +
-                              count(primes[prime].pattern.begin(),
+                               count(primes[prime].pattern.begin(),
                                      primes[prime].pattern.end(), '1');
         for (size_t minterm : primes[prime].minterms)
             coveringPrimes[minterm].push_back(prime);
@@ -216,6 +197,165 @@ vector<Implicant> findMinimumCover(const string &bitstream, char target)
          });
     return cover;
 }
+
+void validateCountBitstream(const string &bitstream)
+{
+    if (bitstream.empty() || (bitstream.size() & (bitstream.size() - 1)) != 0)
+        throw invalid_argument("bitstream length must be a nonzero power of two");
+    if (any_of(bitstream.begin(), bitstream.end(),
+               [](char bit) { return bit != '0' && bit != '1'; }))
+        throw invalid_argument("bitstream may contain only '0' and '1'");
+}
+
+size_t countPrimeImplicants(const string &bitstream)
+{
+    validateCountBitstream(bitstream);
+    return findPrimeImplicants(bitstream, '1').size();
+}
+
+size_t countEssentialPrimeImplicants(const string &bitstream)
+{
+    validateCountBitstream(bitstream);
+    const vector<Implicant> primes = findPrimeImplicants(bitstream, '1');
+    vector<bool> essential(primes.size(), false);
+
+    for (size_t minterm = 0; minterm < bitstream.size(); ++minterm)
+    {
+        if (bitstream[minterm] != '1')
+            continue;
+
+        size_t coverCount = 0;
+        size_t soleCover = primes.size();
+        for (size_t prime = 0; prime < primes.size(); ++prime)
+        {
+            if (binary_search(primes[prime].minterms.begin(),
+                              primes[prime].minterms.end(), minterm))
+            {
+                ++coverCount;
+                soleCover = prime;
+                if (coverCount > 1)
+                    break;
+            }
+        }
+        if (coverCount == 1)
+            essential[soleCover] = true;
+    }
+    return static_cast<size_t>(count(essential.begin(), essential.end(), true));
+}
+
+size_t countOnSetMinterms(const string &bitstream)
+{
+    validateCountBitstream(bitstream);
+    return static_cast<size_t>(count(bitstream.begin(), bitstream.end(), '1'));
+}
+
+size_t countOffSetMaxterms(const string &bitstream)
+{
+    validateCountBitstream(bitstream);
+    return static_cast<size_t>(count(bitstream.begin(), bitstream.end(), '0'));
+}
+
+string generateHazardFreeSOP(const string &bitstream,
+                             const vector<string> &inputNames,
+                             const string &outputName,
+                             bool &hazardExists)
+{
+    validateCountBitstream(bitstream);
+    if (inputNames.size() >= numeric_limits<size_t>::digits ||
+        bitstream.size() != (size_t{1} << inputNames.size()))
+        throw invalid_argument("bitstream length must equal 2^number-of-inputs");
+    if (outputName.empty() ||
+        any_of(inputNames.begin(), inputNames.end(),
+               [](const string &name) { return name.empty(); }))
+        throw invalid_argument("input and output names must not be empty");
+
+    hazardExists = false;
+    vector<Implicant> cover = findMinimumCover(bitstream, '1');
+    const vector<Implicant> primes = findPrimeImplicants(bitstream, '1');
+    const size_t inputCount = inputNames.size();
+
+    for (size_t row = 0; row < bitstream.size(); ++row)
+    {
+        if (bitstream[row] != '1')
+            continue;
+
+        for (size_t input = 0; input < inputCount; ++input)
+        {
+            const size_t neighbor = row ^ (size_t{1} << (inputCount - 1 - input));
+            if (neighbor <= row || bitstream[neighbor] != '1')
+                continue;
+
+            const bool alreadyBridged = any_of(
+                cover.begin(), cover.end(),
+                [row, neighbor](const Implicant &implicant)
+                {
+                    return binary_search(implicant.minterms.begin(),
+                                         implicant.minterms.end(), row) &&
+                           binary_search(implicant.minterms.begin(),
+                                         implicant.minterms.end(), neighbor);
+                });
+            if (alreadyBridged)
+                continue;
+
+            hazardExists = true;
+            const auto bridge = find_if(
+                primes.begin(), primes.end(),
+                [row, neighbor](const Implicant &implicant)
+                {
+                    return binary_search(implicant.minterms.begin(),
+                                         implicant.minterms.end(), row) &&
+                           binary_search(implicant.minterms.begin(),
+                                         implicant.minterms.end(), neighbor);
+                });
+            if (bridge == primes.end())
+                throw runtime_error("could not find an implicant to cover adjacent on-set minterms");
+
+            const bool alreadyAdded = any_of(
+                cover.begin(), cover.end(),
+                [&bridge](const Implicant &implicant)
+                {
+                    return implicant.pattern == bridge->pattern;
+                });
+            if (!alreadyAdded)
+                cover.push_back(*bridge);
+        }
+    }
+
+    if (cover.empty())
+        return outputName + " = 0";
+    sort(cover.begin(), cover.end(),
+         [](const Implicant &left, const Implicant &right)
+         {
+             return left.pattern < right.pattern;
+         });
+
+    string expression;
+    for (const Implicant &implicant : cover)
+    {
+        if (!expression.empty())
+            expression += " + ";
+        if (inputNames.empty())
+        {
+            expression += "1";
+            continue;
+        }
+
+        bool hasLiteral = false;
+        for (size_t input = 0; input < inputNames.size(); ++input)
+        {
+            if (implicant.pattern[input] == '-')
+                continue;
+            if (hasLiteral)
+                expression += " ";
+            expression += inputNames[input];
+            if (implicant.pattern[input] == '0')
+                expression += "'";
+            hasLiteral = true;
+        }
+        if (!hasLiteral)
+            expression += "1";
+    }
+    return outputName + " = " + expression;
 }
 
 string generateCanonicalSOP(const string &bitstream,
@@ -290,10 +430,27 @@ string generateCanonicalPOS(const string &bitstream,
 
 string generateMinimizedSOP(const string &bitstream,
                             const vector<string> &inputNames,
-                            const string &outputName)
+                            const string &outputName,
+                            int &literalsSaved)
 {
-    validateMinimizerInputs(bitstream, inputNames, outputName);
+    const size_t oneCount = count(bitstream.begin(), bitstream.end(), '1');
+    if (!inputNames.empty() && oneCount > static_cast<size_t>(INT_MAX) / inputNames.size())
+        throw overflow_error("SOP literal savings exceed the supported integer range");
+    const int canonicalLiteralCount =
+        static_cast<int>(oneCount * inputNames.size());
     const vector<Implicant> cover = findMinimumCover(bitstream, '1');
+    size_t minimizedLiteralCount = 0;
+    for (const Implicant &implicant : cover)
+    {
+        const size_t implicantLiteralCount = static_cast<size_t>(
+            count(implicant.pattern.begin(), implicant.pattern.end(), '0') +
+            count(implicant.pattern.begin(), implicant.pattern.end(), '1'));
+        if (implicantLiteralCount > static_cast<size_t>(INT_MAX) - minimizedLiteralCount)
+            throw overflow_error("minimized SOP literal count exceeds the supported integer range");
+        minimizedLiteralCount += implicantLiteralCount;
+    }
+    literalsSaved = canonicalLiteralCount - static_cast<int>(minimizedLiteralCount);
+
     if (cover.empty())
         return outputName + " = 0";
 
@@ -328,13 +485,31 @@ string generateMinimizedSOP(const string &bitstream,
 
 string generateMinimizedPOS(const string &bitstream,
                             const vector<string> &inputNames,
-                            const string &outputName)
+                            const string &outputName,
+                            int &literalsSaved)
 {
-    validateMinimizerInputs(bitstream, inputNames, outputName);
-    if (all_of(bitstream.begin(), bitstream.end(),
-               [](char bit) { return bit == '0'; }))
-        return outputName + " = 0";
+    const size_t zeroCount = count(bitstream.begin(), bitstream.end(), '0');
+    if (!inputNames.empty() && zeroCount > static_cast<size_t>(INT_MAX) / inputNames.size())
+        throw overflow_error("POS literal savings exceed the supported integer range");
+    const int canonicalLiteralCount =
+        static_cast<int>(zeroCount * inputNames.size());
     const vector<Implicant> cover = findMinimumCover(bitstream, '0');
+    size_t minimizedLiteralCount = 0;
+    for (const Implicant &implicant : cover)
+    {
+        const size_t implicantLiteralCount = static_cast<size_t>(
+            count(implicant.pattern.begin(), implicant.pattern.end(), '0') +
+            count(implicant.pattern.begin(), implicant.pattern.end(), '1'));
+        if (implicantLiteralCount > static_cast<size_t>(INT_MAX) - minimizedLiteralCount)
+            throw overflow_error("minimized POS literal count exceeds the supported integer range");
+        minimizedLiteralCount += implicantLiteralCount;
+    }
+    literalsSaved = canonicalLiteralCount - static_cast<int>(minimizedLiteralCount);
+
+    if (all_of(bitstream.begin(), bitstream.end(),
+               [](char bit)
+               { return bit == '0'; }))
+        return outputName + " = 0";
     if (cover.empty())
         return outputName + " = 1";
 
