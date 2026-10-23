@@ -227,6 +227,31 @@ vector<string> generateBitstreams(
     return bitstreams;
 }
 
+void exportTruthTable(const string &bitstream,
+                      const vector<string> &inputNames,
+                      const string &outputName,
+                      const string &filePath)
+{
+
+    ofstream outputFile(filePath);
+    if (!outputFile)
+        throw runtime_error("could not open truth-table output file '" + filePath + "'");
+
+    for (const string &inputName : inputNames)
+        outputFile << inputName << '\t';
+    outputFile << outputName << '\n';
+
+    for (size_t row = 0; row < bitstream.size(); ++row)
+    {
+        for (size_t input = 0; input < inputNames.size(); ++input)
+        {
+            const bool bit = ((row >> (inputNames.size() - 1 - input)) & 1U) != 0;
+            outputFile << (bit ? '1' : '0') << '\t';
+        }
+        outputFile << bitstream[row] << '\n';
+    }
+}
+
 vector<string> generateSOPBitstream(
     const vector<vector<ProductTerm>> &outputTerms, const set<char> &varSet)
 {

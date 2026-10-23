@@ -3,3 +3,4 @@
 *.blif
 parser
 main
+*.v

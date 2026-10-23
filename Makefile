@@ -9,4 +9,6 @@ analyzer.o: analyzer.cpp
 	$(CC) $(FLAGS) -o analyzer.o -c analyzer.cpp
 verilog_generation.o: verilog_generation.cpp
 	$(CC) $(FLAGS) -o verilog_generation.o -c verilog_generation.cpp
-	
+
+clean:
+	rm *.o

@@ -18,13 +18,16 @@ std::string flipBinaryString(const std::string &input)
 
 int main(int argc, char *argv[])
 {
-    if (argc == 1)
+    if (argc < 3)
     {
         cout << "please provide arguments\n";
         return 0;
     }
     string filename = argv[1];
     ifstream inFile(filename);
+
+    string out_file = argv[2];
+    ofstream outFile(out_file);
 
     if (!inFile)
     {
@@ -101,12 +104,21 @@ int main(int argc, char *argv[])
 
     for (size_t output = 0; output < bitstreams.size(); ++output)
     {
+
         const string &bitstream = bitstreams[output];
         const string &outputName = outputNames[output];
+        cout << "Information for " << outputName << endl;
+        outFile << "Information for " << outputName << endl;
+
         cout << "canonical SOP: "
              << generateCanonicalSOP(bitstream, inputNames, outputName) << endl;
         cout << "canonical POS: "
              << generateCanonicalPOS(bitstream, inputNames, outputName) << endl;
+
+        outFile << "canonical SOP: "
+                << generateCanonicalSOP(bitstream, inputNames, outputName) << endl;
+        outFile << "canonical POS: "
+                << generateCanonicalPOS(bitstream, inputNames, outputName) << endl;
 
         // Find the inverse function by inverting the bitstream.
         const string bitstreamFlip = flipBinaryString(bitstream);
@@ -114,6 +126,11 @@ int main(int argc, char *argv[])
              << generateCanonicalSOP(bitstreamFlip, inputNames, outputName + "-bar") << endl;
         cout << "canonical POS: "
              << generateCanonicalPOS(bitstreamFlip, inputNames, outputName + "-bar") << endl;
+
+        outFile << "canonical SOP: "
+                << generateCanonicalSOP(bitstreamFlip, inputNames, outputName + "-bar") << endl;
+        outFile << "canonical POS: "
+                << generateCanonicalPOS(bitstreamFlip, inputNames, outputName + "-bar") << endl;
 
         // minimized SOP/POS
         int sopLiteralsSaved = 0;
@@ -131,18 +148,41 @@ int main(int argc, char *argv[])
         cout << "# on-set minterms: " << countOnSetMinterms(bitstream) << endl;
         cout << "# off-set minterms: " << countOffSetMaxterms(bitstream) << endl;
 
+        outFile << "minimized SOP: "
+                << minimizedSOP
+                << " (literals saved: " << sopLiteralsSaved << ")" << endl;
+        outFile << "minimized POS: "
+                << generateMinimizedPOS(bitstream, inputNames, outputName, posLiteralsSaved)
+                << " (literals saved: " << posLiteralsSaved << ")" << endl;
+
+        outFile << "# prime implicants: " << countPrimeImplicants(bitstream) << endl;
+        outFile << "# essential prime implicants: " << countEssentialPrimeImplicants(bitstream) << endl;
+        outFile << "# on-set minterms: " << countOnSetMinterms(bitstream) << endl;
+        outFile << "# off-set minterms: " << countOffSetMaxterms(bitstream) << endl;
+
         bool hazardExists = false;
         string hazardFree = generateHazardFreeSOP(bitstream, inputNames, outputName, hazardExists);
         if (hazardExists)
         {
             cout << "there is hazard in original circuit, hazard-free version: " << hazardFree << endl;
+            outFile << "there is hazard in original circuit, hazard-free version: " << hazardFree << endl;
         }
         else
         {
             cout << "no hazard exists" << endl;
+            outFile << "no hazard exists" << endl;
         }
 
+        outFile << endl;
+
+        string truthTablePath = outputName + ".txt";
+        exportTruthTable(bitstream, inputNames, outputName, truthTablePath);
+
+        // verilog file creation
+        string verilog_path = outputName + ".v";
+        ofstream verilogFile(verilog_path);
         cout << generateVerilogModule(minimizedSOP) << endl;
+        verilogFile << generateVerilogModule(minimizedSOP) << endl;
     }
 
     return 0;

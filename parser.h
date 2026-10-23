@@ -56,6 +56,10 @@ bool evaluateBlifSignal(const string &signal,
 vector<string> generateBitstreams(
     size_t inputCount, size_t outputCount,
     const function<vector<bool>(const vector<bool> &)> &evaluateRow);
+void exportTruthTable(const string &bitstream,
+                      const vector<string> &inputNames,
+                      const string &outputName,
+                      const string &filePath);
 string generateCanonicalSOP(const string &bitstream,
                             const vector<string> &inputNames,
                             const string &outputName);
